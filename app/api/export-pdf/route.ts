@@ -24,7 +24,7 @@ export async function GET(req: Request) {
       args: chromium.args,
       defaultViewport: { width: 1200, height: 1600 },
       executablePath: executablePath || process.env.PUPPETEER_EXECUTABLE_PATH,
-      headless: chromium.headless,
+      headless: true,
     })
 
     const page = await browser.newPage()
