@@ -37,25 +37,35 @@ export default function Home() {
   }
 
   async function downloadPdf() {
-    if (!previewRef.current) return
-    const mod: any = await import('html2pdf.js')
-    const html2pdf: any = mod?.default || mod
+    if (!url) return alert('No URL to export')
     
-    if (typeof html2pdf !== 'function') {
-      alert('PDF exporter failed to load. Please try again.')
-      return
-    }
+    // Instead of doing it client-side, we now route to the serverless PDF generator
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/export-pdf?url=${encodeURIComponent(url)}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null)
+        throw new Error(errorData?.error || `Server responded with ${response.status}`)
+      }
 
-    const opt = {
-      margin: [10, 10, 10, 10],
-      filename: 'chat-export.pdf',
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] },
+      // Convert response to blob and trigger download
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = 'chat-export.pdf'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(downloadUrl)
+      document.body.removeChild(a)
+
+    } catch (err: any) {
+      console.error(err)
+      alert(`Export failed: ${err.message}`)
+    } finally {
+      setLoading(false)
     }
-    
-    await html2pdf().from(previewRef.current).set(opt).save()
   }
 
   return (
