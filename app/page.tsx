@@ -1,6 +1,8 @@
 'use client'
 import { useState, useRef } from 'react'
 import { Download, Link as LinkIcon, RefreshCw, Trash2, CheckCircle2, FileText, Smartphone } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 type Msg = { role: string; content: string }
 
@@ -39,17 +41,18 @@ export default function Home() {
   async function downloadPdf() {
     if (!url) return alert('No URL to export')
     
-    // Instead of doing it client-side, we now route to the serverless PDF generator
+    // Fallback logic: 
+    // We try the Puppeteer high-fidelity export first.
+    // If Vercel times out or fails (due to binary limits), we fallback to client-side printing
     setLoading(true)
     try {
       const response = await fetch(`/api/export-pdf?url=${encodeURIComponent(url)}`)
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        throw new Error(errorData?.error || `Server responded with ${response.status}`)
+        // Fallback to client print
+        throw new Error('Server PDF failed, falling back to client print.')
       }
 
-      // Convert response to blob and trigger download
       const blob = await response.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -61,8 +64,9 @@ export default function Home() {
       document.body.removeChild(a)
 
     } catch (err: any) {
-      console.error(err)
-      alert(`Export failed: ${err.message}`)
+      console.warn('Falling back to native print due to:', err.message)
+      // Fallback: trigger native print dialog
+      window.print()
     } finally {
       setLoading(false)
     }
@@ -71,7 +75,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center py-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="w-full max-w-3xl mb-8 text-center space-y-4">
+      <div className="w-full max-w-3xl mb-8 text-center space-y-4 print:hidden">
         <div className="inline-flex items-center justify-center p-3 bg-blue-100 rounded-full mb-2 shadow-sm">
           <FileText className="w-8 h-8 text-blue-600" />
         </div>
@@ -82,7 +86,7 @@ export default function Home() {
       </div>
 
       {/* Input Section */}
-      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6 mb-8 transition-all hover:shadow-md">
+      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6 mb-8 transition-all hover:shadow-md print:hidden">
         <label htmlFor="url-input" className="block text-sm font-medium text-slate-700 mb-2">
           Paste your conversation share link:
         </label>
@@ -123,7 +127,7 @@ export default function Home() {
 
       {/* Preview Section */}
       <div className="w-full max-w-3xl flex flex-col flex-grow">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 print:hidden">
           <h2 className="text-lg font-semibold text-slate-900 flex items-center">
             <Smartphone className="w-5 h-5 mr-2 text-slate-500" />
             Preview
@@ -139,9 +143,9 @@ export default function Home() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-grow flex flex-col relative">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-grow flex flex-col relative print:border-none print:shadow-none">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center h-64">
+            <div className="flex flex-col items-center justify-center p-12 text-center h-64 print:hidden">
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                 <FileText className="w-8 h-8 text-slate-400" />
               </div>
@@ -151,7 +155,7 @@ export default function Home() {
             </div>
           ) : (
             <div 
-              className="p-4 md:p-8 overflow-y-auto max-h-[65vh] prose prose-slate max-w-none" 
+              className="p-4 md:p-8 overflow-y-auto max-h-[65vh] prose prose-slate max-w-none print:max-h-none print:overflow-visible" 
             >
               <div ref={previewRef} className="space-y-6 pb-4">
                 {/* Print-only title */}
@@ -163,18 +167,20 @@ export default function Home() {
                 {messages.map((m, i) => {
                   const isUser = m.role.toLowerCase().includes('user')
                   return (
-                    <div key={i} className="flex gap-4 p-1">
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                    <div key={i} className="flex gap-4 p-1 print:break-inside-avoid">
+                      <div className={\`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold \${
                         isUser ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}>
+                      }\`}>
                         {isUser ? 'U' : 'AI'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-slate-900 mb-1 capitalize">
                           {isUser ? 'User' : 'Assistant'}
                         </div>
-                        <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                          {m.content}
+                        <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed prose prose-sm max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {m.content}
+                          </ReactMarkdown>
                         </div>
                       </div>
                     </div>
@@ -186,7 +192,7 @@ export default function Home() {
         </div>
       </div>
 
-      <footer className="mt-12 text-center pb-8">
+      <footer className="mt-12 text-center pb-8 print:hidden">
         <p className="text-xs text-slate-500">Built with Next.js • Mobile-first UI • Client-side generation</p>
       </footer>
     </div>
