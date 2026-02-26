@@ -1,0 +1,23 @@
+{
+  "name": "chat-exporter",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "html2pdf.js": "^0.10.1",
+    "next": "14.0.0",
+    "node-html-parser": "^6.1.2",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "typescript": "5.2.2",
+    "@types/react": "18.2.27",
+    "@types/node": "20.5.1"
+  }
+}
