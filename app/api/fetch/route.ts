@@ -44,9 +44,14 @@ export async function GET(req: Request) {
     if (url.includes('chatgpt.com/share')) {
       // Try to extract markdown assistant blocks embedded as JSON strings like "### ..."
       const mdBlocks: string[] = []
+      
+      // Look through all script tags for next.js hydration payload
       for (const s of scriptNodes) {
         const txt = s.text || ''
         if (!txt) continue
+        
+        // Let's grab all occurrences of the text content inside the flight router response
+        // ChatGPT encodes strings like "### \ud83d\udce6 What is **`react-helmet-async`**?..."
         const re = /"(#{1,6}[\s\S]*?)"/g
         let m
         while ((m = re.exec(txt)) !== null) {
@@ -55,11 +60,21 @@ export async function GET(req: Request) {
           if (raw.includes('###') || raw.includes('\\n\\n') || raw.length > 100) {
             try {
               // Parse the JSON string properly to handle \n, \u003c, etc.
-              const parsed = JSON.parse(`"${raw}"`)
+              // Also manually decode common unicode hex escapes if JSON.parse leaves them
+              let parsed = JSON.parse(`"${raw}"`)
+              // Unescape remaining things like \u003c to <
+              parsed = parsed.replace(/\\u([0-9a-fA-F]{4})/g, (match: string, grp: string) => {
+                 return String.fromCharCode(parseInt(grp, 16))
+              })
               mdBlocks.push(parsed)
             } catch (e) {
-              // Fallback
-              const unescaped = raw.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+              // Fallback if strict JSON parsing fails
+              const unescaped = raw
+                .replace(/\\n/g, '\n')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\')
+                .replace(/\\u003c/g, '<')
+                .replace(/\\u003e/g, '>')
               mdBlocks.push(unescaped)
             }
           }
@@ -67,10 +82,14 @@ export async function GET(req: Request) {
       }
       if (mdBlocks.length) {
         // Try to find a user prompt (simple heuristic: text with a question mark near the start)
-        const userMatch = html.match(/\"([^\"]{10,200}\?)\"/i)
+        const userMatch = html.match(/\"([^"]{10,200}\?)\"/i)
         if (userMatch) {
           try {
-             messages.push({ role: 'user', content: JSON.parse(`"${userMatch[1]}"`) })
+             let parsedUser = JSON.parse(`"${userMatch[1]}"`)
+             parsedUser = parsedUser.replace(/\\u([0-9a-fA-F]{4})/g, (match: string, grp: string) => {
+                 return String.fromCharCode(parseInt(grp, 16))
+             })
+             messages.push({ role: 'user', content: parsedUser })
           } catch(e) {
              messages.push({ role: 'user', content: userMatch[1].replace(/\\n/g, '\n') })
           }
