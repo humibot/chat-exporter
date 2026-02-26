@@ -52,10 +52,16 @@ export async function GET(req: Request) {
         while ((m = re.exec(txt)) !== null) {
           const raw = m[1]
           // Heuristic: keep blocks that look like markdown with headings or multiple newlines
-          if (raw.includes('###') || raw.includes('\n\n') || raw.length > 100) {
-            // Unescape common sequences
-            const unescaped = raw.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
-            mdBlocks.push(unescaped)
+          if (raw.includes('###') || raw.includes('\\n\\n') || raw.length > 100) {
+            try {
+              // Parse the JSON string properly to handle \n, \u003c, etc.
+              const parsed = JSON.parse(`"${raw}"`)
+              mdBlocks.push(parsed)
+            } catch (e) {
+              // Fallback
+              const unescaped = raw.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+              mdBlocks.push(unescaped)
+            }
           }
         }
       }
@@ -63,7 +69,11 @@ export async function GET(req: Request) {
         // Try to find a user prompt (simple heuristic: text with a question mark near the start)
         const userMatch = html.match(/\"([^\"]{10,200}\?)\"/i)
         if (userMatch) {
-          messages.push({ role: 'user', content: userMatch[1].replace(/\\n/g, '\n') })
+          try {
+             messages.push({ role: 'user', content: JSON.parse(`"${userMatch[1]}"`) })
+          } catch(e) {
+             messages.push({ role: 'user', content: userMatch[1].replace(/\\n/g, '\n') })
+          }
         }
         for (const b of mdBlocks) {
           messages.push({ role: 'assistant', content: b })
