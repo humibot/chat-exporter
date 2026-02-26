@@ -42,61 +42,78 @@ export async function GET(req: Request) {
 
     // Provider-specific heuristic for ChatGPT share links
     if (url.includes('chatgpt.com/share')) {
-      // Try to extract markdown assistant blocks embedded as JSON strings like "### ..."
-      const mdBlocks: string[] = []
+      const messagesFound: any[] = []
       
-      // Look through all script tags for next.js hydration payload
+      // Look through all script tags for the Next.js Flight Router payload
       for (const s of scriptNodes) {
         const txt = s.text || ''
         if (!txt) continue
         
-        // Let's grab all occurrences of the text content inside the flight router response
-        // ChatGPT encodes strings like "### \ud83d\udce6 What is **`react-helmet-async`**?..."
-        const re = /"(#{1,6}[\s\S]*?)"/g
-        let m
-        while ((m = re.exec(txt)) !== null) {
-          const raw = m[1]
-          // Heuristic: keep blocks that look like markdown with headings or multiple newlines
-          if (raw.includes('###') || raw.includes('\\n\\n') || raw.length > 100) {
-            try {
-              // Parse the JSON string properly to handle \n, \u003c, etc.
-              // Also manually decode common unicode hex escapes if JSON.parse leaves them
-              let parsed = JSON.parse(`"${raw}"`)
-              // Unescape remaining things like \u003c to <
-              parsed = parsed.replace(/\\u([0-9a-fA-F]{4})/g, (match: string, grp: string) => {
-                 return String.fromCharCode(parseInt(grp, 16))
-              })
-              mdBlocks.push(parsed)
-            } catch (e) {
-              // Fallback if strict JSON parsing fails
-              const unescaped = raw
-                .replace(/\\n/g, '\n')
-                .replace(/\\"/g, '"')
-                .replace(/\\\\/g, '\\')
-                .replace(/\\u003c/g, '<')
-                .replace(/\\u003e/g, '>')
-              mdBlocks.push(unescaped)
+        // Match the enqueue payload which contains the chat data
+        const enqueueMatch = txt.match(/enqueue\(\"([\s\S]*?)\"\)/)
+        if (enqueueMatch) {
+          try {
+            // The payload is a JavaScript string literal. Parse it to unescape \", \\n, etc.
+            const unescapedString = JSON.parse(`"${enqueueMatch[1]}"`)
+            // The unescaped string is a JSON array
+            const data = JSON.parse(unescapedString)
+            
+            // Recursively find all strings in the JSON structure
+            const findStrings = (obj: any): string[] => {
+              let strings: string[] = []
+              if (typeof obj === 'string') {
+                strings.push(obj)
+              } else if (Array.isArray(obj)) {
+                for (let item of obj) strings.push(...findStrings(item))
+              } else if (obj !== null && typeof obj === 'object') {
+                for (let key in obj) strings.push(...findStrings(obj[key]))
+              }
+              return strings
             }
+            
+            const allStrings = findStrings(data)
+            
+            // Heuristic to separate User and Assistant messages based on string content
+            for (const str of allStrings) {
+              if (str.length < 10) continue
+              // Skip internal React/Next.js strings
+              if (str.includes('react-router') || str.includes('__NEXT_DATA__') || str.includes('<!DOCTYPE')) continue
+              
+              // Assistant messages usually contain markdown headers or multiple newlines
+              if (str.includes('###') || str.includes('\n\n') || str.includes('```')) {
+                // Prevent duplicates
+                if (!messagesFound.some(m => m.content === str)) {
+                  messagesFound.push({ role: 'assistant', content: str })
+                }
+              } 
+              // User messages usually end in ? or are short unformatted text
+              else if (str.trim().endsWith('?') || str.length > 20) {
+                 // Prevent duplicates and avoid grabbing random JSON keys
+                 if (!messagesFound.some(m => m.content === str) && !str.includes('{"') && !str.match(/^[a-z_A-Z0-9]+$/)) {
+                    // Try to avoid false positives by checking if it's already caught
+                    messagesFound.push({ role: 'user', content: str })
+                 }
+              }
+            }
+          } catch (e) {
+            console.error('Failed to parse enqueue payload', e)
           }
         }
       }
-      if (mdBlocks.length) {
-        // Try to find a user prompt (simple heuristic: text with a question mark near the start)
-        const userMatch = html.match(/\"([^"]{10,200}\?)\"/i)
-        if (userMatch) {
-          try {
-             let parsedUser = JSON.parse(`"${userMatch[1]}"`)
-             parsedUser = parsedUser.replace(/\\u([0-9a-fA-F]{4})/g, (match: string, grp: string) => {
-                 return String.fromCharCode(parseInt(grp, 16))
-             })
-             messages.push({ role: 'user', content: parsedUser })
-          } catch(e) {
-             messages.push({ role: 'user', content: userMatch[1].replace(/\\n/g, '\n') })
-          }
-        }
-        for (const b of mdBlocks) {
-          messages.push({ role: 'assistant', content: b })
-        }
+      
+      if (messagesFound.length > 0) {
+         // Sort to put user messages first (simple heuristic)
+         messagesFound.sort((a, b) => a.role === 'user' ? -1 : 1)
+         
+         // In many cases, we might grab too many strings. 
+         // For a simple conversation, we can just take the longest assistant message 
+         // and the longest user message to avoid noise.
+         const userMsgs = messagesFound.filter(m => m.role === 'user').sort((a,b) => b.content.length - a.content.length)
+         const asstMsgs = messagesFound.filter(m => m.role === 'assistant').sort((a,b) => b.content.length - a.content.length)
+         
+         messages = []
+         if (userMsgs.length > 0) messages.push(userMsgs[0])
+         if (asstMsgs.length > 0) messages.push(asstMsgs[0])
       }
     }
 
