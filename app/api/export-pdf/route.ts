@@ -22,9 +22,9 @@ export async function GET(req: Request) {
 
     browser = await puppeteer.launch({
       args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
+      defaultViewport: { width: 1200, height: 1600 },
       executablePath: executablePath || process.env.PUPPETEER_EXECUTABLE_PATH,
-      headless: true, // true or 'new' in newer puppeteer
+      headless: chromium.headless,
     })
 
     const page = await browser.newPage()
