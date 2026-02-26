@@ -167,7 +167,7 @@ export default function Home() {
                 {messages.map((m, i) => {
                   const isUser = m.role.toLowerCase().includes('user')
                   return (
-                    <div key={i} className="flex gap-4 p-1 print:break-inside-avoid">
+                    <div key={i} className="flex gap-4 p-1 print:break-inside-avoid print-avoid-break">
                       <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                         isUser ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'
                       }`}>
