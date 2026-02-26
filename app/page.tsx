@@ -168,9 +168,9 @@ export default function Home() {
                   const isUser = m.role.toLowerCase().includes('user')
                   return (
                     <div key={i} className="flex gap-4 p-1 print:break-inside-avoid">
-                      <div className={\`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold \${
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                         isUser ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'
-                      }\`}>
+                      }`}>
                         {isUser ? 'U' : 'AI'}
                       </div>
                       <div className="flex-1 min-w-0">
