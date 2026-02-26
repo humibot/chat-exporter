@@ -58,17 +58,20 @@ export async function GET(req: Request) {
                   messages.push({ role: 'assistant', content: item });
                 }
                 // Detect User text
-                else if (item.length > 10 && item.length < 200 && !item.includes('_') && item.includes(' ')) {
-                   if (!['React Helmet Async Explained', 'Our latest and most advanced model', 'Shared via ChatGPT'].includes(item) && !item.endsWith('.png')) {
+                else if (item.length > 5 && item.length < 500 && !item.includes('_') && item.includes(' ') && !item.startsWith('http')) {
+                   const blacklist = ['React Helmet Async Explained', 'Our latest and most advanced model', 'Shared via ChatGPT', 'ChatGPT', 'Copy code'];
+                   let isBlacklisted = false;
+                   for (const b of blacklist) {
+                     if (item.includes(b)) isBlacklisted = true;
+                   }
+                   
+                   if (!isBlacklisted && !item.endsWith('.png')) {
                        if (/[a-zA-Z]/.test(item)) {
-                          // Simple heuristic for prompt
-                          if (item.toLowerCase().includes('what is') || item.includes('?')) {
-                             messages.push({ role: 'user', content: item });
-                          }
+                          // It passed the filters, it's a prompt
+                          messages.push({ role: 'user', content: item });
                        }
                    }
-                }
-              }
+                }              }
             });
           } catch (e) {}
         }
